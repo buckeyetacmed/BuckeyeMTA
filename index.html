@@ -871,9 +871,25 @@
       <div class="sec-label">Estimated personnel &amp; casualties</div>
       <div class="cas-grid">
         <div class="cas-card"><label>SWAT operators</label><input type="number" min="0" placeholder="0" id="cas_op"></div>
-        <div class="cas-card"><label>Civilian / hostages</label><input type="number" min="0" placeholder="0" id="cas_civ"></div>
+        <div class="cas-card">
+          <label>Civilian / hostages</label>
+          <input type="text" id="cas_civ" placeholder="0" style="font-size:20px;font-weight:700;width:100%;border:none;background:transparent;text-align:center;color:var(--color-text-primary);font-family:inherit;outline:none;">
+          <div style="margin-top:3px;text-align:center;">
+            <label style="font-size:10px;color:var(--color-text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:3px;">
+              <input type="checkbox" id="cas_civ_na" onchange="document.getElementById('cas_civ').value=this.checked?'N/A':'';document.getElementById('cas_civ').disabled=this.checked;" style="width:11px;height:11px;accent-color:#3D4A2E;"> N/A
+            </label>
+          </div>
+        </div>
         <div class="cas-card"><label>Known subjects</label><input type="number" min="0" placeholder="0" id="cas_sub"></div>
-        <div class="cas-card"><label>Max predicted casualties</label><input type="number" min="0" placeholder="0" id="cas_max"></div>
+        <div class="cas-card">
+          <label>Max predicted casualties</label>
+          <input type="text" id="cas_max" placeholder="0" style="font-size:20px;font-weight:700;width:100%;border:none;background:transparent;text-align:center;color:var(--color-text-primary);font-family:inherit;outline:none;">
+          <div style="margin-top:3px;text-align:center;">
+            <label style="font-size:10px;color:var(--color-text-secondary);cursor:pointer;display:inline-flex;align-items:center;gap:3px;">
+              <input type="checkbox" id="cas_max_na" onchange="document.getElementById('cas_max').value=this.checked?'N/A':'';document.getElementById('cas_max').disabled=this.checked;" style="width:11px;height:11px;accent-color:#3D4A2E;"> N/A
+            </label>
+          </div>
+        </div>
       </div>
       <div class="grid g2" style="margin-top:10px;">
         <div class="field"><label>MCI threshold</label>
@@ -934,7 +950,7 @@
           <div class="field"><label>Address</label><input type="text" id="h1_addr"></div>
           <div class="field"><label>GPS coordinates</label><input type="text" id="h1_gps" placeholder="Auto-filled from search"></div>
           <div class="field"><label>Main phone</label><input type="tel" id="h1_phone" placeholder="(000) 000-0000"></div>
-          <div class="field"><label>Trauma bay / ED direct line</label><input type="tel" id="h1_trauma" placeholder="(000) 000-0000"></div>
+          <div class="field"><label>Trauma bay / ED direct line</label><input type="tel" id="h1_trauma" placeholder="Call main line to obtain direct ED number"></div>
           <div class="field"><label>Trauma level</label>
             <select id="h1_level">
               <option>Level I</option><option>Level II</option><option>Level III</option>
@@ -963,7 +979,7 @@
           <div class="field"><label>Address</label><input type="text" id="h2_addr"></div>
           <div class="field"><label>GPS coordinates</label><input type="text" id="h2_gps" placeholder="Auto-filled from search"></div>
           <div class="field"><label>Main phone</label><input type="tel" id="h2_phone" placeholder="(000) 000-0000"></div>
-          <div class="field"><label>Trauma bay / ED direct line</label><input type="tel" id="h2_trauma" placeholder="(000) 000-0000"></div>
+          <div class="field"><label>Trauma bay / ED direct line</label><input type="tel" id="h2_trauma" placeholder="Call main line to obtain direct ED number"></div>
           <div class="field"><label>Trauma level</label>
             <select id="h2_level">
               <option>Level I</option><option>Level II</option><option>Level III</option>
@@ -979,7 +995,7 @@
       </div>
 
       <div class="hosp-card">
-        <div class="card-head">Tertiary / burn / specialty <span id="h3-level-badge" class="tbadge t3" style="display:none;"></span></div>
+        <div class="card-head">Tertiary / Specialty <span id="h3-level-badge" class="tbadge t3" style="display:none;"></span></div>
         <div class="grid g1" style="margin-bottom:10px;">
           <div class="field"><label>Facility name</label>
             <div class="autocomplete-wrap" id="h3-wrap" style="position:relative;">
@@ -1150,11 +1166,11 @@ function doSearch(q, key) {
   var url;
 
   if (isHosp) {
-    // Ohio-only hospital search — restrict to state=Ohio via viewbox + countrycodes
+    // Ohio-only hospital search — no bounding box, filter by state after
+    // Adding "Ohio" to query ensures relevant results even without bounding box
     url = 'https://nominatim.openstreetmap.org/search'
-      + '?q=' + encodeURIComponent(q + ' hospital')
-      + '&format=json&addressdetails=1&limit=7&countrycodes=us'
-      + '&viewbox=-84.82,41.98,-80.52,38.40&bounded=1';
+      + '?q=' + encodeURIComponent(q + ' hospital Ohio')
+      + '&format=json&addressdetails=1&limit=10&countrycodes=us';
   } else if (isLZ) {
     url = 'https://nominatim.openstreetmap.org/search'
       + '?q=' + encodeURIComponent(q)
@@ -1196,53 +1212,128 @@ function renderDrop(data, key) {
   drop.style.display = 'block';
 }
 
-function pick(r, key) {
-  var a = r.address || {};
-  var lat = parseFloat(r.lat).toFixed(5);
-  var lon = parseFloat(r.lon).toFixed(5);
-  var gps = lat + ', ' + lon;
-  var city = a.city || a.town || a.village || a.municipality || '';
-  var county = a.county || '';
-  var state = a.state || '';
+function buildFullAddress(a, displayName) {
+  var city     = a.city || a.town || a.village || a.municipality || '';
+  var state    = a.state || '';
   var postcode = a.postcode || '';
-  var road = a.road || '';
+  var road     = a.road || '';
   var houseNum = a.house_number || '';
-  var street = houseNum ? (houseNum + ' ' + road).trim() : road;
-  var placeName = r.name || r.display_name.split(',')[0];
-  var fullAddr = street
+  var street   = houseNum ? (houseNum + ' ' + road).trim() : road;
+  return street
     ? [street, city, state, postcode].filter(Boolean).join(', ')
-    : r.display_name;
+    : (displayName || '');
+}
+
+function reverseGeocode(lat, lon, callback) {
+  var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat
+    + '&lon=' + lon + '&format=json&addressdetails=1';
+  fetch(url, { headers: { 'Accept-Language': 'en-US', 'User-Agent': 'BuckeyeTacMed-TEMS/1.0' } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { callback(data); })
+    .catch(function() { callback(null); });
+}
+
+function pick(r, key) {
+  var a        = r.address || {};
+  var lat      = parseFloat(r.lat).toFixed(5);
+  var lon      = parseFloat(r.lon).toFixed(5);
+  var gps      = lat + ', ' + lon;
+  var city     = a.city || a.town || a.village || a.municipality || '';
+  var county   = a.county || '';
+  var houseNum = a.house_number || '';
+  var placeName = r.name || r.display_name.split(',')[0];
+  var fullAddr  = buildFullAddress(a, r.display_name);
+
+  // Close dropdown immediately
+  var dropId = key === 'scene' ? 'scene-drop' : key + '-drop';
+  var dropEl = document.getElementById(dropId);
+  if (dropEl) dropEl.style.display = 'none';
 
   if (key === 'scene') {
+    // Set what we have immediately, then refine with reverse geocode if no house number
     document.getElementById('loc_address').value = fullAddr;
-    if (city) document.getElementById('loc_city').value = city;
+    if (city)   document.getElementById('loc_city').value   = city;
     if (county) document.getElementById('loc_county').value = county;
     document.getElementById('loc_gps').value = gps;
-    document.getElementById('scene-drop').style.display = 'none';
+
+    // If no house number, reverse geocode to try to get precise address
+    if (!houseNum && r.name) {
+      reverseGeocode(r.lat, r.lon, function(rev) {
+        if (rev && rev.address) {
+          var refined = buildFullAddress(rev.address, rev.display_name);
+          // Only update if reverse geocode returned something better (has house number)
+          if (rev.address.house_number && refined) {
+            document.getElementById('loc_address').value = r.name + ' — ' + refined;
+          } else if (refined && refined.length > fullAddr.length) {
+            document.getElementById('loc_address').value = r.name + ' — ' + refined;
+          }
+          // Update city/county if better data came back
+          var rc = rev.address;
+          var rcity = rc.city || rc.town || rc.village || rc.municipality || '';
+          if (rcity && !document.getElementById('loc_city').value) {
+            document.getElementById('loc_city').value = rcity;
+          }
+          if (rc.county && !document.getElementById('loc_county').value) {
+            document.getElementById('loc_county').value = rc.county;
+          }
+        }
+      });
+    }
+
     fetchWeather(parseFloat(r.lat), parseFloat(r.lon));
     findNearestHospitals(parseFloat(r.lat), parseFloat(r.lon));
     findNearestBurnCenter(parseFloat(r.lat), parseFloat(r.lon));
 
   } else if (key === 'lz1') {
+    // For LZs: always show place name + address
     var lzAddr = placeName ? placeName + (fullAddr ? ' — ' + fullAddr : '') : fullAddr;
     document.getElementById('lz1_search').value = placeName || fullAddr;
-    document.getElementById('lz1_name').value = lzAddr;
-    document.getElementById('lz1_gps').value = gps;
-    document.getElementById('lz1-drop').style.display = 'none';
+    document.getElementById('lz1_name').value   = lzAddr;
+    document.getElementById('lz1_gps').value    = gps;
+    // Refine if needed
+    if (!houseNum && r.name) {
+      reverseGeocode(r.lat, r.lon, function(rev) {
+        if (rev && rev.address && rev.address.house_number) {
+          var refined = buildFullAddress(rev.address, rev.display_name);
+          document.getElementById('lz1_name').value = placeName + ' — ' + refined;
+        }
+      });
+    }
 
   } else if (key === 'lz2') {
     var lzAddr2 = placeName ? placeName + (fullAddr ? ' — ' + fullAddr : '') : fullAddr;
     document.getElementById('lz2_search').value = placeName || fullAddr;
-    document.getElementById('lz2_name').value = lzAddr2;
-    document.getElementById('lz2_gps').value = gps;
-    document.getElementById('lz2-drop').style.display = 'none';
+    document.getElementById('lz2_name').value   = lzAddr2;
+    document.getElementById('lz2_gps').value    = gps;
+    if (!houseNum && r.name) {
+      reverseGeocode(r.lat, r.lon, function(rev) {
+        if (rev && rev.address && rev.address.house_number) {
+          var refined = buildFullAddress(rev.address, rev.display_name);
+          document.getElementById('lz2_name').value = placeName + ' — ' + refined;
+        }
+      });
+    }
 
   } else {
-    // Hospitals h1/h2/h3
+    // Hospitals h1/h2/h3 — use place name + best available address
     document.getElementById(key + '_name').value = placeName;
-    document.getElementById(key + '_addr').value = fullAddr;
+    // For hospitals: use display_name components for a clean address
+    var hospAddr = fullAddr || r.display_name;
+    document.getElementById(key + '_addr').value = hospAddr;
     if (document.getElementById(key + '_gps')) document.getElementById(key + '_gps').value = gps;
-    document.getElementById(key + '-drop').style.display = 'none';
+    // Refine hospital address with reverse geocode
+    if (!houseNum) {
+      reverseGeocode(r.lat, r.lon, function(rev) {
+        if (rev && rev.address) {
+          var refined = buildFullAddress(rev.address, rev.display_name);
+          if (refined && rev.address.house_number) {
+            document.getElementById(key + '_addr').value = refined;
+            updateDirLink(key);
+          }
+        }
+      });
+    }
+    updateDirLink(key);
   }
 }
 
@@ -1454,7 +1545,46 @@ function calcHI() {
 }
 
 function generatePDF() {
+  // Force-update all direction link hrefs before printing
+  // so they are real clickable URLs in the saved PDF
+  ['h1', 'h2', 'h3', 'burn'].forEach(function(key) {
+    var gps  = document.getElementById(key === 'burn' ? null : key + '_gps') 
+               ? document.getElementById(key + '_gps') && document.getElementById(key + '_gps').value || ''
+               : '';
+    var addr = document.getElementById(key === 'burn' ? 'burn_addr' : key + '_addr')
+               ? document.getElementById(key === 'burn' ? 'burn_addr' : key + '_addr').value || ''
+               : '';
+    var name = document.getElementById(key === 'burn' ? 'burn_name' : key + '_name')
+               ? document.getElementById(key === 'burn' ? 'burn_name' : key + '_name').value || ''
+               : '';
+
+    var btn = document.getElementById('dir-btn-' + key);
+    if (!btn) return;
+
+    if (!addr && !name) {
+      // Nothing filled — hide the button in print so it doesn't show as a dead link
+      btn.setAttribute('data-print-hidden', '1');
+      btn.style.display = 'none';
+      return;
+    }
+
+    // Build the best possible Google Maps URL using address string
+    var dest = addr || name;
+    var url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(dest);
+    btn.href = url;
+    btn.target = '_blank';
+    btn.rel = 'noopener noreferrer';
+  });
+
   window.print();
+
+  // Restore any hidden buttons after print dialog closes
+  setTimeout(function() {
+    document.querySelectorAll('[data-print-hidden="1"]').forEach(function(el) {
+      el.style.display = '';
+      el.removeAttribute('data-print-hidden');
+    });
+  }, 2000);
 }
 
 
